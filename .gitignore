@@ -2,5 +2,6 @@
 *.fit
 activities/
 *.png
+!sample_japan.png
 node_modules/
 sample_data/
