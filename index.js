@@ -16,6 +16,12 @@ program
   .option('-b, --bbox', 'Use bounding box of all routes (default)', true)
   .option('-B, --no-bbox', 'Render whole world map instead of bounding box')
   .option('-j, --japan', 'Render only Japan area', false)
+  .option('--bounds <string>', 'Render specific bounding box area (minLon,minLat,maxLon,maxLat)', (val) => {
+    const parsed = val.split(',').map(Number);
+    if (parsed.length === 4 && !parsed.some(isNaN)) return parsed;
+    console.error('[Error] Invalid bounds format. Use minLon,minLat,maxLon,maxLat');
+    process.exit(1);
+  })
   .parse(process.argv);
 
 const options = program.opts();
@@ -28,8 +34,11 @@ async function main() {
   console.log(`Output file: ${options.output}`);
   console.log(`Image Size : ${options.width}x${options.height}`);
   console.log(`Map Style  : ${options.style}`);
-  console.log(`Use BBox  : ${options.bbox}`);
-  console.log(`Use Japan : ${options.japan}`);
+  console.log(`Use BBox   : ${options.bbox}`);
+  console.log(`Use Japan  : ${options.japan}`);
+  if (options.bounds) {
+    console.log(`Use Bounds : ${options.bounds.join(',')}`);
+  }
   console.log(`Line Color : rgb(${options.color})`);
   console.log(`Line Alpha : ${options.alpha}`);
   console.log(`===============================================`);

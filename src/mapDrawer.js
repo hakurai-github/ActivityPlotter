@@ -31,11 +31,12 @@ async function drawMap(routes, options) {
         if (!route.points || route.points.length === 0) continue;
 
         let segments = [];
-        if (options.japan) {
+        if (options.bounds || options.japan) {
+            const targetBbox = options.bounds || JAPAN_BBOX;
             let currentSegment = [];
             for (const pt of route.points) {
-                const inJapan = pt[0] >= JAPAN_BBOX[0] && pt[0] <= JAPAN_BBOX[2] && pt[1] >= JAPAN_BBOX[1] && pt[1] <= JAPAN_BBOX[3];
-                if (inJapan) {
+                const inBounds = pt[0] >= targetBbox[0] && pt[0] <= targetBbox[2] && pt[1] >= targetBbox[1] && pt[1] <= targetBbox[3];
+                if (inBounds) {
                     currentSegment.push(pt);
                 } else {
                     if (currentSegment.length > 0) {
@@ -71,8 +72,11 @@ async function drawMap(routes, options) {
         }
     }
 
-    // 描画範囲の判定（優先順位: japan > bbox > 全世界）
-    if (options.japan) {
+    // 描画範囲の判定（優先順位: bounds > japan > bbox > 全世界）
+    if (options.bounds) {
+        console.log(`Rendering map for specific boundaries: ${options.bounds.join(',')}...`);
+        await map.render(options.bounds);
+    } else if (options.japan) {
         console.log('Rendering map for Japan area...');
         await map.render(JAPAN_BBOX);
     } else if (options.bbox) {
