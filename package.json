@@ -1,0 +1,21 @@
+{
+  "name": "activity-plotter",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "GPL-3.0-or-later",
+  "type": "commonjs",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.95",
+    "commander": "^14.0.3",
+    "fit-file-parser": "^2.3.3",
+    "gpxparser": "^3.0.8",
+    "staticmaps": "^1.13.1",
+    "xml2js": "^0.6.2"
+  }
+}

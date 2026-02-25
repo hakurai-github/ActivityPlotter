@@ -1,0 +1,6 @@
+.DS_Store
+*.fit
+activities/
+*.png
+node_modules/
+sample_data/

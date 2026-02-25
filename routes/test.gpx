@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Test Script">
+  <trk>
+    <trkseg>
+      <trkpt lat="35.6895" lon="139.6917"></trkpt>
+      <trkpt lat="35.6900" lon="139.7000"></trkpt>
+      <trkpt lat="35.6800" lon="139.7100"></trkpt>
+      <trkpt lat="35.6700" lon="139.7000"></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
