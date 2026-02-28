@@ -12,44 +12,60 @@ const gunzip = util.promisify(zlib.gunzip);
 const ZWIFT_MANUFACTURER_ID = 260; // ユーザー要件: ZwiftのメーカーID
 
 /**
- * 指定ディレクトリのルートファイルを順次パースし、座標データを抽出する
+ * 指定ディレクトリまたはファイルの配列を順次パースし、座標データを抽出する
+ * @param {string | Array} inputSource - ディレクトリパスの文字列、または { originalname, buffer } の配列
+ * @param {Object} options - { onProgress: (processed, total, filename) => void }
  */
-async function parseRoutes(inputDir) {
-    const files = fs.readdirSync(inputDir);
+async function parseRoutes(inputSource, options = {}) {
     const validExtensions = ['.gpx', '.tcx', '.fit', '.gz'];
     const routes = [];
-
-    // パース対象となるファイルを事前抽出して合計数を取得
     const targetFiles = [];
-    for (const file of files) {
-        const ext = path.extname(file).toLowerCase();
-        if (!validExtensions.includes(ext)) continue;
 
-        let actualExt = ext;
-        if (ext === '.gz') {
-            const baseNameWithoutGz = path.basename(file, '.gz').toLowerCase();
-            actualExt = path.extname(baseNameWithoutGz);
-            if (!['.gpx', '.tcx', '.fit'].includes(actualExt)) {
-                continue; // サポート対象外のgz
+    if (typeof inputSource === 'string') {
+        const files = fs.readdirSync(inputSource);
+        for (const file of files) {
+            const ext = path.extname(file).toLowerCase();
+            if (!validExtensions.includes(ext)) continue;
+
+            let actualExt = ext;
+            if (ext === '.gz') {
+                const baseNameWithoutGz = path.basename(file, '.gz').toLowerCase();
+                actualExt = path.extname(baseNameWithoutGz);
+                if (!['.gpx', '.tcx', '.fit'].includes(actualExt)) continue;
             }
+            targetFiles.push({ filename: file, filePath: path.join(inputSource, file), ext, actualExt });
         }
-        targetFiles.push({ file, ext, actualExt });
+    } else if (Array.isArray(inputSource)) {
+        for (const f of inputSource) {
+            const filename = f.originalname || f.name;
+            const ext = path.extname(filename).toLowerCase();
+            if (!validExtensions.includes(ext)) continue;
+
+            let actualExt = ext;
+            if (ext === '.gz') {
+                const baseNameWithoutGz = path.basename(filename, '.gz').toLowerCase();
+                actualExt = path.extname(baseNameWithoutGz);
+                if (!['.gpx', '.tcx', '.fit'].includes(actualExt)) continue;
+            }
+            targetFiles.push({ filename, buffer: f.buffer, ext, actualExt });
+        }
     }
 
     const totalFiles = targetFiles.length;
     let processedCount = 0;
 
-    for (const { file, ext, actualExt } of targetFiles) {
-        const filePath = path.join(inputDir, file);
+    for (const fileInfo of targetFiles) {
+        const { filename, ext, actualExt } = fileInfo;
+        const source = { buffer: fileInfo.buffer, filePath: fileInfo.filePath };
 
         try {
             let routeData = null;
             if (actualExt === '.gpx') {
-                routeData = await parseGpx(filePath, ext === '.gz');
+                routeData = await parseGpx(source, ext === '.gz', filename);
             } else if (actualExt === '.tcx') {
-                routeData = await parseTcx(filePath, ext === '.gz');
+                routeData = await parseTcx(source, ext === '.gz', filename);
             } else if (actualExt === '.fit') {
-                routeData = await parseFit(filePath, ext === '.gz');
+                routeData = await parseFit(source, ext === '.gz', filename);
             }
 
             if (routeData && routeData.points && routeData.points.length > 0) {
@@ -58,15 +74,21 @@ async function parseRoutes(inputDir) {
                 routes.push(routeData);
             }
         } catch (err) {
-            console.warn(`\n[Warning] Failed to parse ${file}: ${err.message}. Skipping...`);
+            if (!options.onProgress) {
+                console.warn(`\n[Warning] Failed to parse ${filename}: ${err.message}. Skipping...`);
+            }
         }
 
         processedCount++;
-        // 現在の行をクリア(\x1b[2K)してキャリッジリターン(\r)で先頭に戻し、進捗を上書き表示
-        process.stdout.write(`\r\x1b[2K${processedCount}/${totalFiles}`);
+        if (options.onProgress) {
+            options.onProgress(processedCount, totalFiles, filename);
+        } else {
+            // 現在の行をクリア(\x1b[2K)してキャリッジリターン(\r)で先頭に戻し、進捗を上書き表示
+            process.stdout.write(`\r\x1b[2K${processedCount}/${totalFiles}`);
+        }
     }
 
-    if (totalFiles > 0) process.stdout.write('\n'); // 進行表示のあとに改行を追加
+    if (!options.onProgress && totalFiles > 0) process.stdout.write('\n'); // 進行表示のあとに改行を追加
 
     return routes;
 }
@@ -74,8 +96,13 @@ async function parseRoutes(inputDir) {
 /**
  * ファイルの中身を取得する。gzの場合は解凍する。
  */
-async function getFileContent(filePath, isGz, encoding = null) {
-    const buffer = await fs.promises.readFile(filePath);
+async function getFileContent(source, isGz, encoding = null) {
+    let buffer;
+    if (source.buffer) {
+        buffer = source.buffer;
+    } else {
+        buffer = await fs.promises.readFile(source.filePath);
+    }
     if (isGz) {
         const unzipped = await gunzip(buffer);
         return encoding ? unzipped.toString(encoding) : unzipped;
@@ -86,8 +113,8 @@ async function getFileContent(filePath, isGz, encoding = null) {
 /**
  * GPXファイルのパース
  */
-async function parseGpx(filePath, isGz) {
-    const content = await getFileContent(filePath, isGz, 'utf8');
+async function parseGpx(source, isGz, filename) {
+    const content = await getFileContent(source, isGz, 'utf8');
     const gpx = new GpxParser();
     gpx.parse(content);
 
@@ -101,14 +128,14 @@ async function parseGpx(filePath, isGz) {
             if (route.points) points.push(...route.points.map(p => [p.lon, p.lat]));
         });
     }
-    return { filePath, points };
+    return { filePath: filename, points };
 }
 
 /**
  * TCXファイルのパース
  */
-async function parseTcx(filePath, isGz) {
-    const content = await getFileContent(filePath, isGz, 'utf8');
+async function parseTcx(source, isGz, filename) {
+    const content = await getFileContent(source, isGz, 'utf8');
     const parser = new xml2js.Parser();
     const result = await parser.parseStringPromise(content);
 
@@ -137,16 +164,16 @@ async function parseTcx(filePath, isGz) {
         throw new Error('Invalid TCX structure');
     }
 
-    return { filePath, points };
+    return { filePath: filename, points };
 }
 
 /**
  * FITファイルのパース (Zwift除外判定を含む)
  */
-function parseFit(filePath, isGz) {
+function parseFit(source, isGz, filename) {
     return new Promise(async (resolve, reject) => {
         try {
-            const content = await getFileContent(filePath, isGz, null);
+            const content = await getFileContent(source, isGz, null);
 
             const fitParser = new FitParser({
                 force: true,
@@ -182,8 +209,8 @@ function parseFit(filePath, isGz) {
                 }
 
                 if (isZwift) {
-                    console.warn(`[Skip] Zwift virtual activity detected in ${path.basename(filePath)}`);
-                    return resolve(null); // 除外のためnullを返す
+                    // console.warnはCLI実行時のみ出したいので、filenameだけ考慮して除外
+                    return resolve(null);
                 }
 
                 const points = [];
@@ -213,7 +240,7 @@ function parseFit(filePath, isGz) {
                     });
                 }
 
-                resolve({ filePath, points });
+                resolve({ filePath: filename, points });
             });
         } catch (err) {
             reject(err);

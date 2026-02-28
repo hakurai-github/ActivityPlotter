@@ -89,8 +89,13 @@ async function drawMap(routes, options) {
         await map.render([0, 0], 2);
     }
 
-    // 描画したマップをファイルに保存
-    await map.image.save(options.output);
+    // 描画したマップをファイルに保存 (オプション指定時)
+    if (options.output) {
+        await map.image.save(options.output);
+    }
+
+    // Web向けに画像Bufferを返す
+    return await map.image.buffer('image/png');
 }
 
 module.exports = { drawMap };
